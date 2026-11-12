@@ -60,6 +60,23 @@ cd src-tauri
 cargo test
 ```
 
+## BMad Method
+
+Planning and stories are run with the [BMad Method](https://docs.bmad-method.org/)
+(v6.12.4, `bmm` module), set up for Claude Code. The installed skills live
+in `.claude/skills/`, BMad's runtime and shared config in `_bmad/`, and
+planning artifacts in `_bmad-output/`.
+
+Per-user install answers (your name, skill level) are not committed. After
+cloning, run this once to create them; it needs Node.js 20.12+, Python
+3.10+ and [uv](https://docs.astral.sh/uv/):
+
+```sh
+npx bmad-method@6.12.4 install --directory . --modules bmm --tools claude-code --yes
+```
+
+Then start Claude Code in the repo and run `/bmad-help`.
+
 ## Renaming the app
 
 The user-facing name is `productName` in `src-tauri/tauri.conf.json`.

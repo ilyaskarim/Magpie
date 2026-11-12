@@ -40,3 +40,10 @@ Desktop.ini
 .idea/
 *.suo
 *.sw?
+
+# BMad Method: per-user install answers (contain the local user's name).
+# Regenerate them on a new machine with `npx bmad-method install`.
+_bmad/config.user.toml
+_bmad/custom/*.user.toml
+_bmad/core/config.yaml
+_bmad/bmm/config.yaml
