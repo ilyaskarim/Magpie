@@ -1,13 +1,21 @@
 use serde::{Serialize, Serializer};
 
-/// Errors that cross the Tauri command boundary. They serialise to a plain,
-/// human-readable string so the UI can show them as-is.
+use crate::domain::CoreError;
+
+/// Errors that cross the Tauri command boundary (AD-14). They serialise to a
+/// plain, human-readable string so the UI can show them as-is.
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
     #[error("Could not register the shortcut \"{shortcut}\": {reason}")]
     Shortcut { shortcut: String, reason: String },
     #[error("Window error: {0}")]
     Window(String),
+    #[error("History is unavailable: {0}")]
+    StoreUnavailable(String),
+    #[error("Could not open the history database: {0}")]
+    Startup(String),
+    #[error("{0}")]
+    Core(#[from] CoreError),
     #[error("{0}")]
     Tauri(#[from] tauri::Error),
 }

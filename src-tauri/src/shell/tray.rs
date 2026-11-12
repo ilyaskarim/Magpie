@@ -4,7 +4,7 @@ use tauri::{
     tray::{TrayIcon, TrayIconBuilder, TrayIconEvent},
 };
 
-use crate::{app_name, window};
+use super::{app_name, window};
 
 pub const TRAY_ID: &str = "main-tray";
 
