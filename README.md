@@ -45,6 +45,17 @@ in the menu bar (macOS) or the system tray (Windows).
 - **Dismiss it:** <kbd>Esc</kbd>, or click anywhere else.
 - **Quit:** "Quit Magpie" in the tray menu.
 
+To keep test runs away from your real history, a debug build can use a
+throwaway data folder (ignored by release builds):
+
+```sh
+MAGPIE_DATA_DIR=/tmp/magpie-dev npm run tauri dev
+```
+
+History is stored in SQLite under the app's local data folder
+(`~/Library/Application Support/app.magpie.desktop/` on macOS,
+`%LOCALAPPDATA%\app.magpie.desktop\` on Windows).
+
 ## Build
 
 ```sh
