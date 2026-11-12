@@ -1,0 +1,45 @@
+- id: "1"
+  title: "Stage b: capture text into SQLite and list it"
+  description: >-
+    CAP-1 for plain text and the CAP-3 list: a background watcher stores text
+    copies (UUID, timestamp, source app) through the storage trait, and the
+    history window lists them newest first with keyboard selection.
+  invoke_dev_with: >-
+    Introduce the clipboard trait and the storage trait here, with a fake
+    clipboard for tests. Write DECISIONS.md with the monitoring choice.
+- id: "2"
+  title: "Stage c: paste back into the previous app"
+  description: >-
+    CAP-5: Enter writes the item to the clipboard, hides the window, refocuses
+    the previously active app and sends Cmd/Ctrl+V, with the macOS
+    Accessibility first-run flow and the copy-only fallback.
+  done_checkpoint: true
+  invoke_dev_with: >-
+    Stop after this story and demo paste working to the owner before
+    continuing.
+- id: "3"
+  title: "Stage d: search, dedupe, pins"
+  description: >-
+    CAP-4 FTS5 search under 50 ms at 10,000 items, CAP-2 dedupe by content
+    hash moving the item to the top, and CAP-6 pin/unpin with a pinned view.
+  invoke_dev_with: >-
+    Unit tests for dedupe and search, including a 10,000-item timing test.
+- id: "4"
+  title: "Stage e: images, HTML, files"
+  description: >-
+    CAP-1 for HTML, images and file paths, with type-appropriate previews
+    (CAP-3); image data stored as files on disk, not blobs.
+- id: "5"
+  title: "Stage f: privacy filters, retention, settings screen"
+  description: >-
+    CAP-7 concealed-type, ignored-app and pause filters; CAP-8 retention by
+    age and count with pinned exempt and image files deleted; CAP-10 settings
+    screen; CAP-9 tray pause, settings and launch at login.
+  invoke_dev_with: >-
+    Unit tests for retention and each privacy filter against the fake
+    clipboard.
+- id: "6"
+  title: "Stage g: Windows pass and polish"
+  description: >-
+    Verify every capability on Windows, fix platform gaps, finish README
+    permission steps per OS, and report verified, untested and known bugs.
