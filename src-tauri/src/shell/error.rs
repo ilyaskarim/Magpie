@@ -14,6 +14,8 @@ pub enum AppError {
     StoreUnavailable(String),
     #[error("Could not open the history database: {0}")]
     Startup(String),
+    #[error("Could not save your Accessibility choice: {0}")]
+    PermissionChoice(String),
     #[error("{0}")]
     Core(#[from] CoreError),
     #[error("{0}")]

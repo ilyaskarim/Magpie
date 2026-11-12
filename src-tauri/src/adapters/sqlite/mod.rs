@@ -5,7 +5,7 @@ mod migrations;
 
 use std::path::Path;
 
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::domain::error::CoreResult;
 use crate::domain::item::preview;
@@ -117,20 +117,34 @@ impl Store for SqliteStore {
         }
         Ok(out)
     }
-}
 
-impl SqliteStore {
-    /// The full plain text of an item, if any.
-    #[cfg(test)]
-    pub(crate) fn plain_text(&self, id: &str) -> CoreResult<Option<String>> {
-        use rusqlite::OptionalExtension;
-        self.conn
+    fn get_text(&self, id: &str) -> CoreResult<String> {
+        let text: Option<String> = self
+            .conn
             .query_row("SELECT plain_text FROM items WHERE id = ?1", [id], |r| {
                 r.get(0)
             })
             .optional()
-            .map(Option::flatten)
-            .map_err(db_err)
+            .map_err(db_err)?
+            .ok_or(CoreError::NotFound)?;
+        // Every stage-b/c item is text; non-text kinds arrive in stage e.
+        text.ok_or_else(|| CoreError::Storage("this item has no text".into()))
+    }
+
+    fn touch(&mut self, id: &str, at: i64) -> CoreResult<()> {
+        // Only the recency changes; `source_app`, `id` and `pinned` stay
+        // (AD-7). An UPDATE keeps `seq`, so the FTS row is untouched.
+        let changed = self
+            .conn
+            .execute(
+                "UPDATE items SET last_copied_at = ?2 WHERE id = ?1",
+                params![id, at],
+            )
+            .map_err(db_err)?;
+        if changed == 0 {
+            return Err(CoreError::NotFound);
+        }
+        Ok(())
     }
 }
 
@@ -292,9 +306,49 @@ mod tests {
         let (_d, mut s) = temp_store();
         let big = "x".repeat(1024 * 1024);
         let r = s.record(&NewCapture::text(big.clone(), None, 1)).unwrap();
-        assert_eq!(s.plain_text(&r.id).unwrap().as_deref(), Some(big.as_str()));
+        assert_eq!(s.get_text(&r.id).unwrap(), big);
         let items = s.list_recent(1).unwrap();
         assert_eq!(items[0].preview.chars().count(), 200);
+    }
+
+    #[test]
+    fn get_text_returns_full_text_or_not_found() {
+        let (_d, mut s) = temp_store();
+        let r = s
+            .record(&NewCapture::text("  hello\n".into(), None, 1))
+            .unwrap();
+        assert_eq!(s.get_text(&r.id).unwrap(), "  hello\n");
+        assert!(matches!(s.get_text("missing"), Err(CoreError::NotFound)));
+    }
+
+    #[test]
+    fn touch_moves_item_to_top_and_keeps_everything_else() {
+        let (_d, mut s) = temp_store();
+        let old = s
+            .record(&NewCapture::text("old".into(), Some("Notes".into()), 1))
+            .unwrap();
+        s.record(&NewCapture::text("new".into(), Some("Safari".into()), 2))
+            .unwrap();
+        let seq_before = count(
+            &s,
+            "SELECT seq FROM items WHERE content_hash IS NOT NULL ORDER BY created_at LIMIT 1",
+        );
+        s.touch(&old.id, 3).unwrap();
+
+        let items = s.list_recent(10).unwrap();
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].id, old.id);
+        assert_eq!(items[0].last_copied_at, 3);
+        assert_eq!(items[0].created_at, 1);
+        assert_eq!(items[0].source_app.as_deref(), Some("Notes"));
+        assert_eq!(
+            count(
+                &s,
+                "SELECT seq FROM items WHERE content_hash IS NOT NULL ORDER BY created_at LIMIT 1"
+            ),
+            seq_before
+        );
+        assert!(matches!(s.touch("missing", 4), Err(CoreError::NotFound)));
     }
 
     #[test]

@@ -1,6 +1,7 @@
 //! Use cases that combine ports. Cfg-free and Tauri-free.
 
 pub mod capture;
+pub mod paste;
 
 /// Now as Unix milliseconds UTC (AD-4).
 pub fn now_ms() -> i64 {

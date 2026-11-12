@@ -10,6 +10,21 @@ pub trait ClipboardReader {
     fn text(&self) -> CoreResult<Option<String>>;
 }
 
+/// The OS clipboard sequence number (AD-7): macOS `NSPasteboard.changeCount`,
+/// Windows `GetClipboardSequenceNumber`. It grows with every clipboard change.
+pub trait ClipboardSequence {
+    /// The current sequence number, or `None` where the platform has none
+    /// (then no change is ever treated as Magpie's own write).
+    fn sequence(&self) -> CoreResult<Option<i64>>;
+}
+
+/// Write access to the system clipboard, for paste-back (CAP-5).
+pub trait ClipboardWriter: ClipboardSequence {
+    /// Replaces the clipboard contents with `text` as plain text (AD-13: for
+    /// a text-only item that is every stored representation).
+    fn write_text(&self, text: &str) -> CoreResult<()>;
+}
+
 /// A source of clipboard-change notifications.
 pub trait ClipboardWatch {
     /// Blocks, calling `on_change` after every clipboard change, until the
@@ -20,15 +35,20 @@ pub trait ClipboardWatch {
 
 #[cfg(test)]
 pub mod fakes {
+    use std::cell::{Cell, RefCell};
+
     use super::*;
     use crate::domain::CoreError;
 
-    /// An in-memory clipboard.
+    /// An in-memory clipboard. Every write bumps `seq` by one, like the OS.
     #[derive(Default)]
     pub struct FakeClipboard {
         pub formats: Vec<String>,
         pub text: Option<String>,
         pub fail: bool,
+        pub seq: Cell<i64>,
+        /// Everything written, in order.
+        pub writes: RefCell<Vec<String>>,
     }
 
     impl FakeClipboard {
@@ -36,16 +56,20 @@ pub mod fakes {
             Self {
                 formats: vec!["public.utf8-plain-text".into()],
                 text: Some(text.into()),
-                fail: false,
+                ..Self::default()
             }
         }
 
         pub fn image_only() -> Self {
             Self {
                 formats: vec!["public.png".into()],
-                text: None,
-                fail: false,
+                ..Self::default()
             }
+        }
+
+        /// Simulates a copy made by another app.
+        pub fn external_change(&self) {
+            self.seq.set(self.seq.get() + 1);
         }
     }
 
@@ -62,6 +86,23 @@ pub mod fakes {
                 return Err(CoreError::Clipboard("fake failure".into()));
             }
             Ok(self.text.clone())
+        }
+    }
+
+    impl ClipboardSequence for FakeClipboard {
+        fn sequence(&self) -> CoreResult<Option<i64>> {
+            Ok(Some(self.seq.get()))
+        }
+    }
+
+    impl ClipboardWriter for FakeClipboard {
+        fn write_text(&self, text: &str) -> CoreResult<()> {
+            if self.fail {
+                return Err(CoreError::Clipboard("fake failure".into()));
+            }
+            self.writes.borrow_mut().push(text.to_string());
+            self.seq.set(self.seq.get() + 1);
+            Ok(())
         }
     }
 

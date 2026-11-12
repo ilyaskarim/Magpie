@@ -36,6 +36,12 @@ pub fn run() {
             window::hide_window,
             commands::list_items,
             commands::startup_error,
+            commands::paste_item,
+            commands::return_to_previous_app,
+            commands::accessibility_status,
+            commands::request_accessibility,
+            commands::open_accessibility_settings,
+            commands::dismiss_accessibility_prompt,
         ])
         .on_window_event(window::on_window_event)
         .setup(|app| {
@@ -52,7 +58,8 @@ pub fn run() {
             // still opens and shows the error.
             let store = shell::open_store(handle);
             let watcher_store = store.as_ref().ok().cloned();
-            shell::manage_state(handle, store);
+            let own_writes = std::sync::Arc::new(services::paste::OwnWrites::default());
+            shell::manage_state(handle, store, own_writes.clone());
 
             if let Err(e) = hotkey::register(handle, hotkey::DEFAULT_SHORTCUT) {
                 // Not fatal: the tray menu still opens the window. Most likely
@@ -61,7 +68,7 @@ pub fn run() {
             }
 
             if let Some(store) = watcher_store {
-                shell::start_watcher(handle, store);
+                shell::start_watcher(handle, store, own_writes);
             }
 
             // Keep the window alive and hidden; it is shown on demand.
