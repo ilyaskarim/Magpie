@@ -1,0 +1,42 @@
+# Rust / Tauri build output
+target/
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# Node / Vite
+node_modules/
+dist/
+dist-ssr/
+*.local
+*.tsbuildinfo
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Secrets and signing material: never commit these
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.key
+*.keystore
+
+# OS files
+.DS_Store
+._*
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Editors
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.sw?
