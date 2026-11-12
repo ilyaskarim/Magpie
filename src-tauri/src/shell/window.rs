@@ -1,17 +1,23 @@
 //! The history window is created once at startup and then only shown and
 //! hidden, never destroyed, so it appears instantly on the hotkey.
 
-use tauri::{AppHandle, Manager, Runtime, Window, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, Runtime, Window, WindowEvent};
 
-use crate::error::{AppError, AppResult};
+use super::EVENT_WINDOW_SHOWN;
+use super::error::{AppError, AppResult};
 
 pub const MAIN: &str = "main";
 
+/// Shows the history window. Every path that opens it (hotkey, tray, second
+/// launch) goes through here, so the UI always gets `window-shown` (AD-17).
 pub fn show<R: Runtime>(app: &AppHandle<R>) {
     if let Some(w) = app.get_webview_window(MAIN) {
         let _ = w.center();
         let _ = w.show();
         let _ = w.set_focus();
+        if let Err(e) = app.emit_to(MAIN, EVENT_WINDOW_SHOWN, ()) {
+            eprintln!("could not emit {EVENT_WINDOW_SHOWN}: {e}");
+        }
     }
 }
 

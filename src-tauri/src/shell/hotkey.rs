@@ -1,8 +1,8 @@
 use tauri::{AppHandle, Runtime};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
-use crate::error::{AppError, AppResult};
-use crate::window;
+use super::error::{AppError, AppResult};
+use super::window;
 
 /// Cmd+Shift+V on macOS, Ctrl+Shift+V on Windows and Linux.
 pub const DEFAULT_SHORTCUT: &str = "CmdOrCtrl+Shift+V";

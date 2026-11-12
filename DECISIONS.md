@@ -154,3 +154,32 @@ ones where a reasonable person might have chosen differently:
   crate.
 - **Why:** Tauri already depends on the `objc2` crates, so this adds no
   second set of CoreFoundation types and keeps one binding family.
+
+### Release builds unwind on panic
+
+- **Chosen:** no `panic = "abort"` in `[profile.release]`.
+- **Alternative:** keep the scaffold's `panic = "abort"` for a slightly
+  smaller binary.
+- **Why:** AD-18 restarts the capture watcher after a panic via
+  `catch_unwind`, which does nothing when panics abort the process.
+
+### Text dedupe uses the raw bytes
+
+- **Chosen:** the dedupe key for text is the exact UTF-8 bytes; `hello`
+  and `hello\n`, or CRLF and LF versions, are different items.
+- **Alternative:** normalise line endings and trailing whitespace first.
+- **Why:** paste-back must return exactly what was copied. Merging
+  near-identical copies would silently change what gets pasted.
+
+### Polling merges very fast copies (macOS)
+
+- Copies made within one 500 ms poll keep only the last one, and copies
+  made while the watcher is restarting after a crash are not captured.
+  This is the cost of polling on macOS; Windows uses change notifications.
+
+### Isolated debug runs
+
+- **Chosen:** debug builds honour `MAGPIE_DATA_DIR` (history stored there)
+  and then skip the single-instance check. Release builds ignore it.
+- **Why:** test runs must never write to a user's real history, and must
+  be able to run next to an installed copy.
