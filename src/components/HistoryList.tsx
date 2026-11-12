@@ -25,10 +25,12 @@ interface Props {
   items: ItemSummary[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  /** Click: paste the item (same as Enter). */
+  onActivate: (id: string) => void;
   now: number;
 }
 
-export function HistoryList({ items, selectedId, onSelect, now }: Props) {
+export function HistoryList({ items, selectedId, onSelect, onActivate, now }: Props) {
   const selectedRef = useRef<HTMLLIElement>(null);
 
   useEffect(() => {
@@ -58,6 +60,7 @@ export function HistoryList({ items, selectedId, onSelect, now }: Props) {
               e.preventDefault(); // keep focus in the search box
               onSelect(item.id);
             }}
+            onClick={() => onActivate(item.id)}
           >
             <span className="preview">{item.preview}</span>
             <span className="meta">
