@@ -35,3 +35,37 @@ body { background: var(--bg); overflow: hidden; }
 }
 .empty { margin: auto; color: var(--muted); }
 .error { padding: 8px 16px; color: var(--danger); border-bottom: 1px solid var(--line); }
+.history {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  overflow-y: auto;
+  flex: 1;
+}
+.item {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 8px 16px;
+  cursor: default;
+  border-left: 3px solid transparent;
+}
+.item.selected {
+  background: var(--line);
+  border-left-color: var(--accent);
+}
+.preview {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.meta {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.source { max-width: 140px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
