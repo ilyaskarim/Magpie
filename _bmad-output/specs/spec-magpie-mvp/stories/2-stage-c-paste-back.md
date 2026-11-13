@@ -2,7 +2,7 @@
 title: 'Stage c: paste back into the previous app'
 type: 'feature'
 created: '2026-11-13'
-status: 'in-review'
+status: 'done'
 baseline_commit: 'acfd839ed220c6d20619ebd5194dac6218bc123a'
 route: 'dispatch'
 review_loop_iteration: 0
@@ -76,6 +76,8 @@ context:
 - **Platform UI.** `accessibility_status` reports `applies` (true on macOS); the frontend uses it for the explainer and for ⌘V vs Ctrl+V. On Windows `Frontmost::app` is `None` until stage g, so pastes are `CopiedOnly(noTarget)` with the inline "Copied — paste it where you need it" notice.
 - **Permission button.** First time: the system prompt only. Already asked: opens the Accessibility pane directly. The marker is written only after one of those succeeded.
 - `paste_item` always emits `history-changed` when it returns, so a vanished item also disappears from the list.
+
+- **Owner checkpoint (2026-11-13):** the owner ran the release build on macOS 26.5.1 and confirmed that paste into the previous app works (Accessibility granted). The copy-only fallback notice was not separately confirmed by the owner.
 
 ## Spec Change Log
 
