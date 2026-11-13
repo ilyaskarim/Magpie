@@ -2,6 +2,7 @@
 
 pub mod error;
 pub mod item;
+pub mod search;
 pub mod target;
 
 pub use error::CoreError;

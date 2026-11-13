@@ -21,8 +21,21 @@ export interface ItemSummary {
 
 export const DEFAULT_LIST_LIMIT = 500;
 
-export function listItems(limit = DEFAULT_LIST_LIMIT): Promise<ItemSummary[]> {
-  return invoke<ItemSummary[]>("list_items", { limit });
+/**
+ * Items matching `query` (each word a prefix, all required), newest first.
+ * An empty query lists by recency. `pinnedOnly` serves the Pinned view.
+ */
+export function search(
+  query: string,
+  pinnedOnly: boolean,
+  limit = DEFAULT_LIST_LIMIT,
+): Promise<ItemSummary[]> {
+  return invoke<ItemSummary[]>("search", { query, pinnedOnly, limit });
+}
+
+/** Pins or unpins an item; the backend then emits `history-changed`. */
+export function setPinned(id: string, pinned: boolean): Promise<void> {
+  return invoke("set_pinned", { id, pinned });
 }
 
 /** Why history is unavailable, or null if the database opened fine. */

@@ -34,7 +34,8 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             window::hide_window,
-            commands::list_items,
+            commands::search,
+            commands::set_pinned,
             commands::startup_error,
             commands::paste_item,
             commands::return_to_previous_app,

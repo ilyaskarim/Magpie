@@ -14,7 +14,7 @@ use crate::services::capture::lock;
 use crate::services::now_ms;
 use crate::services::paste::{self, CopiedOnlyReason, PasteOutcome};
 
-/// Upper bound on `list_items`' `limit`.
+/// Upper bound on `search`'s `limit`.
 pub const MAX_LIST_LIMIT: u32 = 1000;
 
 #[derive(Debug, Serialize)]
@@ -43,13 +43,6 @@ impl From<ItemSummary> for ItemSummaryDto {
     }
 }
 
-/// The most recent items, newest first. Async so it runs off the main thread
-/// and never blocks the UI while the watcher holds the store lock.
-#[tauri::command(async)]
-pub fn list_items(state: State<'_, AppState>, limit: u32) -> AppResult<Vec<ItemSummaryDto>> {
-    list_items_impl(&state, limit)
-}
-
 fn store(state: &AppState) -> AppResult<&SharedStore> {
     state
         .store
@@ -57,11 +50,53 @@ fn store(state: &AppState) -> AppResult<&SharedStore> {
         .map_err(|e| AppError::StoreUnavailable(e.clone()))
 }
 
-fn list_items_impl(state: &AppState, limit: u32) -> AppResult<Vec<ItemSummaryDto>> {
+/// Items matching `query` as the user typed it (each token a prefix, all
+/// required, AD-8), newest first; a missing or blank query lists by recency.
+/// `pinned_only` serves the Pinned view. Async so typing never blocks the
+/// main thread while the watcher holds the store lock.
+#[tauri::command(async)]
+pub fn search(
+    state: State<'_, AppState>,
+    query: Option<String>,
+    pinned_only: bool,
+    limit: u32,
+) -> AppResult<Vec<ItemSummaryDto>> {
+    search_impl(&state, query.as_deref(), pinned_only, limit)
+}
+
+fn search_impl(
+    state: &AppState,
+    query: Option<&str>,
+    pinned_only: bool,
+    limit: u32,
+) -> AppResult<Vec<ItemSummaryDto>> {
     let store = store(state)?;
     let limit = limit.clamp(1, MAX_LIST_LIMIT) as usize;
-    let items = lock(store).list_recent(limit)?;
+    let items = lock(store).search(query, pinned_only, limit)?;
     Ok(items.into_iter().map(Into::into).collect())
+}
+
+/// Pins or unpins item `id` (CAP-6), then tells the UI to refetch (AD-2).
+/// An unknown id is a readable error.
+#[tauri::command(async)]
+pub fn set_pinned(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    pinned: bool,
+) -> AppResult<()> {
+    let result = set_pinned_impl(&state, &id, pinned);
+    // Emitted on failure too: a missing item means the UI's list is stale.
+    if let Err(e) = app.emit(EVENT_HISTORY_CHANGED, ()) {
+        eprintln!("could not emit {EVENT_HISTORY_CHANGED}: {e}");
+    }
+    result
+}
+
+fn set_pinned_impl(state: &AppState, id: &str, pinned: bool) -> AppResult<()> {
+    let store = store(state)?;
+    lock(store).set_pinned(id, pinned)?;
+    Ok(())
 }
 
 /// Why history is unavailable, or `None` if the database opened fine.
@@ -290,7 +325,9 @@ mod tests {
             startup_error_impl(&state).as_deref(),
             Some("disk is read-only")
         );
-        let err = list_items_impl(&state, 10).unwrap_err().to_string();
+        let err = search_impl(&state, None, false, 10)
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("disk is read-only"), "{err}");
     }
 
@@ -303,9 +340,37 @@ mod tests {
             .unwrap();
         let state = state_with(Ok(Arc::new(Mutex::new(store))), None);
         assert_eq!(startup_error_impl(&state), None);
-        let items = list_items_impl(&state, 10).unwrap();
+        let items = search_impl(&state, None, false, 10).unwrap();
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].preview, "hello");
+    }
+
+    #[test]
+    fn search_command_filters_and_pins() {
+        let dir = tempfile::tempdir().unwrap();
+        let (state, id) = sqlite_state(&dir);
+        let found = search_impl(&state, Some("hel"), false, 10).unwrap();
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].id, id);
+        assert_eq!(search_impl(&state, Some(" "), false, 10).unwrap().len(), 2);
+        assert!(search_impl(&state, None, true, 10).unwrap().is_empty());
+
+        set_pinned_impl(&state, &id, true).unwrap();
+        let pinned = search_impl(&state, None, true, 10).unwrap();
+        assert_eq!(pinned.len(), 1);
+        assert!(pinned[0].pinned);
+        assert!(
+            search_impl(&state, Some("newer"), true, 10)
+                .unwrap()
+                .is_empty()
+        );
+
+        let err = set_pinned_impl(&state, "gone", true).unwrap_err();
+        assert_eq!(err.to_string(), "This item is no longer in history");
+        let err = search_impl(&state_with(Err("disk".into()), None), None, false, 10)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("disk"), "{err}");
     }
 
     #[test]
@@ -342,7 +407,7 @@ mod tests {
         assert_eq!(out, PasteOutcomeDto::Pasted);
         assert_eq!(*paster.activated.borrow(), [7]);
         assert_eq!(*clip.writes.borrow(), ["hello"]);
-        let items = list_items_impl(&state, 10).unwrap();
+        let items = search_impl(&state, None, false, 10).unwrap();
         assert_eq!(items.len(), 2);
         assert_eq!(items[0].id, id);
         assert_eq!(items[0].source_app.as_deref(), Some("Notes"));
@@ -377,7 +442,7 @@ mod tests {
         assert_eq!(*clip.writes.borrow(), ["hello"]);
         assert_eq!(hidden.get(), 0, "window stays open for the notice");
         assert!(paster.activated.borrow().is_empty());
-        assert_eq!(list_items_impl(&state, 1).unwrap()[0].id, id);
+        assert_eq!(search_impl(&state, None, false, 1).unwrap()[0].id, id);
 
         // Then the UI returns focus: hide, and reactivate the saved app.
         return_to_previous_app_impl(&state, &paster, &|| hidden.set(hidden.get() + 1));
