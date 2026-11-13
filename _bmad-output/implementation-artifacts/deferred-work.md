@@ -15,3 +15,15 @@
 - source_spec: `_bmad-output/specs/spec-magpie-mvp/stories/2-stage-c-paste-back.md`
   summary: Resolve the key code for "V" in the current keyboard layout (UCKeyTranslate / TIS) instead of the fixed ANSI key code 9.
   evidence: On Dvorak and similar layouts, key code 9 is not V, so the synthetic Cmd+V sends a different shortcut.
+- source_spec: `_bmad-output/specs/spec-magpie-mvp/stories/3-stage-d-search-dedupe-pins.md`
+  summary: Test that `set_pinned` and `paste_item` emit `history-changed` (needs a Tauri mock-runtime harness).
+  evidence: only the `_impl` functions are tested; removing the emit would pass every test.
+- source_spec: `_bmad-output/specs/spec-magpie-mvp/stories/3-stage-d-search-dedupe-pins.md`
+  summary: Run `cargo test --release search` automatically (CI) so the 50 ms budget is enforced, not just checked by hand.
+  evidence: plain `cargo test` uses a 250 ms debug bound.
+- source_spec: `_bmad-output/specs/spec-magpie-mvp/stories/3-stage-d-search-dedupe-pins.md`
+  summary: Complete the ARIA tab pattern for the All/Pinned switch (arrow keys, aria-controls, tabpanel).
+  evidence: only role="tablist"/"tab" are set; stage g polish.
+- source_spec: `_bmad-output/specs/spec-magpie-mvp/stories/3-stage-d-search-dedupe-pins.md`
+  summary: Split `src/App.tsx` (375 lines) — move keyboard handling and refresh logic into hooks — to meet the 250-line guideline in CLAUDE.md.
+  evidence: App.tsx predates the guideline and grew with each stage; do it at the start of stage e before adding more.

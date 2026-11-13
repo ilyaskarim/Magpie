@@ -211,3 +211,17 @@ ones where a reasonable person might have chosen differently:
   themselves, and returning focus afterwards means that is one keystroke.
   The keystroke is sent only when the saved app (same pid and bundle id)
   is confirmed frontmost, so it never lands in the wrong app.
+
+### Search: word-prefix matching, newest first
+
+- **Choice:** each word typed becomes a quoted FTS5 prefix term, and all
+  must match (`hel wor` finds "hello world"). Case and accents are
+  ignored. Results stay in recency order, not relevance order. User input
+  is always quoted, so FTS5 operators (`AND`, `NEAR`, `*`, `col:`) are
+  plain text, and the query is passed as a bound parameter.
+- **Alternatives:** substring matching inside words (`LIKE '%x%'` or a
+  trigram index); ranking by relevance (bm25).
+- **Why:** prefix matching uses the existing FTS5 index and stays under
+  50 ms at 10,000 items (13 ms measured). A clipboard history is mostly
+  recalled by "the thing I copied recently", so recency order beats
+  relevance order.
