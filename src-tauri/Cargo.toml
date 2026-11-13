@@ -1,6 +1,6 @@
 [package]
 name = "magpie"
-version = "0.1.0"
+version = "0.2.0"
 description = "Local-first, cross-platform clipboard manager"
 authors = []
 edition = "2024"
