@@ -10,16 +10,30 @@ pub trait Store {
 
     /// The most recent items, newest `last_copied_at` first (AD-4).
     fn list_recent(&self, limit: usize) -> CoreResult<Vec<ItemSummary>>;
+
+    /// The full plain text of an item. [`CoreError::NotFound`] if no item
+    /// has this id.
+    ///
+    /// [`CoreError::NotFound`]: crate::domain::CoreError::NotFound
+    fn get_text(&self, id: &str) -> CoreResult<String>;
+
+    /// Moves an item to the top: sets `last_copied_at` to `at` and changes
+    /// nothing else (AD-7). [`CoreError::NotFound`] if no item has this id.
+    ///
+    /// [`CoreError::NotFound`]: crate::domain::CoreError::NotFound
+    fn touch(&mut self, id: &str, at: i64) -> CoreResult<()>;
 }
 
 #[cfg(test)]
 pub mod fakes {
     use super::*;
+    use crate::domain::CoreError;
     use crate::domain::item::preview;
 
     #[derive(Default)]
     pub struct MemoryStore {
         rows: Vec<(String, ItemSummary)>, // (content_hash, summary)
+        texts: Vec<(String, String)>,     // (id, full plain text)
     }
 
     impl Store for MemoryStore {
@@ -46,6 +60,7 @@ pub mod fakes {
                     pinned: false,
                 },
             ));
+            self.texts.push((c.id.clone(), c.plain_text.clone()));
             Ok(Recorded {
                 id: c.id.clone(),
                 inserted: true,
@@ -58,6 +73,24 @@ pub mod fakes {
             v.sort_by_key(|r| std::cmp::Reverse(r.last_copied_at)); // stable
             v.truncate(limit);
             Ok(v)
+        }
+
+        fn get_text(&self, id: &str) -> CoreResult<String> {
+            self.texts
+                .iter()
+                .find(|(i, _)| i == id)
+                .map(|(_, t)| t.clone())
+                .ok_or(CoreError::NotFound)
+        }
+
+        fn touch(&mut self, id: &str, at: i64) -> CoreResult<()> {
+            let (_, row) = self
+                .rows
+                .iter_mut()
+                .find(|(_, r)| r.id == id)
+                .ok_or(CoreError::NotFound)?;
+            row.last_copied_at = at;
+            Ok(())
         }
     }
 }

@@ -8,7 +8,8 @@ use std::time::{Duration, Instant};
 use crate::domain::error::CoreResult;
 use crate::domain::item::is_blank;
 use crate::domain::{CoreError, NewCapture, Recorded};
-use crate::ports::{ClipboardReader, ClipboardWatch, Frontmost, Store};
+use crate::ports::{ClipboardReader, ClipboardSequence, ClipboardWatch, Frontmost, Store};
+use crate::services::paste::OwnWrites;
 
 /// Locks the store, recovering from poisoning: a panic elsewhere must not
 /// stop capture forever, and SQLite keeps its own consistency.
@@ -17,18 +18,24 @@ pub fn lock<S: ?Sized>(store: &Mutex<S>) -> MutexGuard<'_, S> {
 }
 
 /// Handles one clipboard change. Returns what was recorded, or `None` if the
-/// change was skipped (no text, or whitespace only).
+/// change was skipped (Magpie's own write, no text, or whitespace only).
 pub fn capture_once<C, F, S>(
     reader: &C,
     frontmost: &F,
     store: &Mutex<S>,
+    own: &OwnWrites,
     now: i64,
 ) -> CoreResult<Option<Recorded>>
 where
-    C: ClipboardReader + ?Sized,
+    C: ClipboardReader + ClipboardSequence + ?Sized,
     F: Frontmost + ?Sized,
     S: Store + ?Sized,
 {
+    // Magpie's own paste-back writes are not captures (AD-7). Checked before
+    // any content is read ...
+    if own.is_own(reader.sequence()?) {
+        return Ok(None);
+    }
     // Formats come first so the privacy filter (AD-6, stage f) can decide
     // before any content is read. An empty clipboard has nothing to keep.
     if reader.formats()?.is_empty() {
@@ -39,6 +46,10 @@ where
         return Ok(None);
     };
     if is_blank(&text) {
+        return Ok(None);
+    }
+    // ... and again after, in case a paste-back write landed while reading.
+    if own.is_own(reader.sequence()?) {
         return Ok(None);
     }
     // OS call before taking the lock (AD-11).
@@ -54,17 +65,18 @@ pub fn watch<W, C, F, S>(
     reader: &C,
     frontmost: &F,
     store: &Mutex<S>,
+    own: &OwnWrites,
     now: &dyn Fn() -> i64,
     notify: &dyn Fn(),
 ) -> CoreResult<()>
 where
     W: ClipboardWatch + ?Sized,
-    C: ClipboardReader + ?Sized,
+    C: ClipboardReader + ClipboardSequence + ?Sized,
     F: Frontmost + ?Sized,
     S: Store + ?Sized,
 {
     watcher.watch(
-        &mut || match capture_once(reader, frontmost, store, now()) {
+        &mut || match capture_once(reader, frontmost, store, own, now()) {
             Ok(Some(_)) => notify(),
             Ok(None) => {}
             // Errors never contain clipboard contents.
@@ -136,9 +148,15 @@ mod tests {
     #[test]
     fn new_text_is_recorded_with_source_app() {
         let store = Mutex::new(MemoryStore::default());
-        let r = capture_once(&FakeClipboard::with_text("hello"), &notes(), &store, 10)
-            .unwrap()
-            .unwrap();
+        let r = capture_once(
+            &FakeClipboard::with_text("hello"),
+            &notes(),
+            &store,
+            &OwnWrites::default(),
+            10,
+        )
+        .unwrap()
+        .unwrap();
         assert!(r.inserted);
         let items = lock(&store).list_recent(10).unwrap();
         assert_eq!(items.len(), 1);
@@ -152,11 +170,26 @@ mod tests {
     fn recopy_bumps_existing_item() {
         let store = Mutex::new(MemoryStore::default());
         let clip = FakeClipboard::with_text("hello");
-        let first = capture_once(&clip, &notes(), &store, 10).unwrap().unwrap();
-        capture_once(&FakeClipboard::with_text("other"), &notes(), &store, 20).unwrap();
-        let second = capture_once(&clip, &FakeFrontmost(None), &store, 30)
+        let first = capture_once(&clip, &notes(), &store, &OwnWrites::default(), 10)
             .unwrap()
             .unwrap();
+        capture_once(
+            &FakeClipboard::with_text("other"),
+            &notes(),
+            &store,
+            &OwnWrites::default(),
+            20,
+        )
+        .unwrap();
+        let second = capture_once(
+            &clip,
+            &FakeFrontmost(None),
+            &store,
+            &OwnWrites::default(),
+            30,
+        )
+        .unwrap()
+        .unwrap();
         assert!(!second.inserted);
         assert_eq!(second.id, first.id);
         let items = lock(&store).list_recent(10).unwrap();
@@ -170,7 +203,14 @@ mod tests {
     #[test]
     fn whitespace_only_is_skipped() {
         let store = Mutex::new(MemoryStore::default());
-        let r = capture_once(&FakeClipboard::with_text("   \n"), &notes(), &store, 1).unwrap();
+        let r = capture_once(
+            &FakeClipboard::with_text("   \n"),
+            &notes(),
+            &store,
+            &OwnWrites::default(),
+            1,
+        )
+        .unwrap();
         assert!(r.is_none());
         assert!(lock(&store).list_recent(10).unwrap().is_empty());
     }
@@ -178,9 +218,23 @@ mod tests {
     #[test]
     fn non_text_is_skipped() {
         let store = Mutex::new(MemoryStore::default());
-        let r = capture_once(&FakeClipboard::image_only(), &notes(), &store, 1).unwrap();
+        let r = capture_once(
+            &FakeClipboard::image_only(),
+            &notes(),
+            &store,
+            &OwnWrites::default(),
+            1,
+        )
+        .unwrap();
         assert!(r.is_none());
-        let empty = capture_once(&FakeClipboard::default(), &notes(), &store, 1).unwrap();
+        let empty = capture_once(
+            &FakeClipboard::default(),
+            &notes(),
+            &store,
+            &OwnWrites::default(),
+            1,
+        )
+        .unwrap();
         assert!(empty.is_none());
         assert!(lock(&store).list_recent(10).unwrap().is_empty());
     }
@@ -192,7 +246,7 @@ mod tests {
             fail: true,
             ..FakeClipboard::with_text("x")
         };
-        assert!(capture_once(&clip, &notes(), &store, 1).is_err());
+        assert!(capture_once(&clip, &notes(), &store, &OwnWrites::default(), 1).is_err());
     }
 
     #[test]
@@ -204,6 +258,7 @@ mod tests {
             &FakeClipboard::with_text("hello"),
             &notes(),
             &store,
+            &OwnWrites::default(),
             &|| 5,
             &|| notified.set(notified.get() + 1),
         )
@@ -218,11 +273,73 @@ mod tests {
             &FakeClipboard::with_text(" "),
             &notes(),
             &store,
+            &OwnWrites::default(),
             &|| 6,
             &|| skipped.set(skipped.get() + 1),
         )
         .unwrap();
         assert_eq!(skipped.get(), 0);
+    }
+
+    #[test]
+    fn own_writes_at_or_below_are_skipped() {
+        let store = Mutex::new(MemoryStore::default());
+        let own = OwnWrites::default();
+        own.record(Some(3));
+        let clip = FakeClipboard::with_text("pasted");
+        for seq in [2, 3] {
+            clip.seq.set(seq);
+            assert!(
+                capture_once(&clip, &notes(), &store, &own, 1)
+                    .unwrap()
+                    .is_none()
+            );
+        }
+        assert!(lock(&store).list_recent(10).unwrap().is_empty());
+        clip.seq.set(4);
+        assert!(
+            capture_once(&clip, &notes(), &store, &own, 2)
+                .unwrap()
+                .is_some()
+        );
+    }
+
+    /// A paste-back write that lands between the first sequence check and
+    /// reading the text is caught by the second check.
+    #[test]
+    fn own_write_during_read_is_skipped() {
+        struct Racy {
+            inner: FakeClipboard,
+            own: std::sync::Arc<OwnWrites>,
+        }
+        impl ClipboardReader for Racy {
+            fn formats(&self) -> CoreResult<Vec<String>> {
+                self.inner.formats()
+            }
+            fn text(&self) -> CoreResult<Option<String>> {
+                // Magpie writes now.
+                self.inner.external_change();
+                self.own.record(self.inner.sequence()?);
+                self.inner.text()
+            }
+        }
+        impl ClipboardSequence for Racy {
+            fn sequence(&self) -> CoreResult<Option<i64>> {
+                self.inner.sequence()
+            }
+        }
+        let own = std::sync::Arc::new(OwnWrites::default());
+        let racy = Racy {
+            inner: FakeClipboard::with_text("pasted"),
+            own: own.clone(),
+        };
+        let store = Mutex::new(MemoryStore::default());
+        assert!(
+            capture_once(&racy, &notes(), &store, &own, 1)
+                .unwrap()
+                .is_none()
+        );
+        assert!(lock(&store).list_recent(10).unwrap().is_empty());
     }
 
     #[test]
@@ -251,7 +368,14 @@ mod tests {
         })
         .join();
         assert!(store.is_poisoned());
-        let r = capture_once(&FakeClipboard::with_text("ok"), &notes(), &*store, 1).unwrap();
+        let r = capture_once(
+            &FakeClipboard::with_text("ok"),
+            &notes(),
+            &*store,
+            &OwnWrites::default(),
+            1,
+        )
+        .unwrap();
         assert!(r.is_some());
     }
 

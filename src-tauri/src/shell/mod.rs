@@ -16,11 +16,15 @@ use crate::adapters::SystemFrontmost;
 use crate::adapters::clipboard::{SystemClipboard, SystemWatcher};
 use crate::adapters::sqlite::SqliteStore;
 use crate::services;
+use crate::services::paste::OwnWrites;
 use error::AppError;
 use state::{AppState, SharedStore};
 
 pub const EVENT_HISTORY_CHANGED: &str = "history-changed";
 pub const EVENT_WINDOW_SHOWN: &str = "window-shown";
+
+/// Marker file in the data root: the Accessibility explainer was answered.
+const PERMISSION_ASKED_MARKER: &str = "accessibility-asked";
 
 /// The user-facing product name, read from `tauri.conf.json` (`productName`).
 pub fn app_name<R: Runtime>(app: &AppHandle<R>) -> String {
@@ -61,7 +65,7 @@ fn data_root<R: Runtime>(app: &AppHandle<R>) -> Result<std::path::PathBuf, AppEr
 }
 
 /// Starts the supervised capture watcher on its own thread (AD-11, AD-18).
-pub fn start_watcher<R: Runtime>(app: &AppHandle<R>, store: SharedStore) {
+pub fn start_watcher<R: Runtime>(app: &AppHandle<R>, store: SharedStore, own: Arc<OwnWrites>) {
     let app = app.clone();
     let spawned = std::thread::Builder::new()
         .name("capture-watcher".into())
@@ -78,6 +82,7 @@ pub fn start_watcher<R: Runtime>(app: &AppHandle<R>, store: SharedStore) {
                     &reader,
                     &SystemFrontmost,
                     &*store,
+                    &own,
                     &services::now_ms,
                     &notify,
                 )
@@ -89,10 +94,17 @@ pub fn start_watcher<R: Runtime>(app: &AppHandle<R>, store: SharedStore) {
 }
 
 /// Registers the managed state, given the outcome of opening the store.
-pub fn manage_state<R: Runtime>(app: &AppHandle<R>, store: Result<SharedStore, AppError>) {
+pub fn manage_state<R: Runtime>(
+    app: &AppHandle<R>,
+    store: Result<SharedStore, AppError>,
+    own: Arc<OwnWrites>,
+) {
     let store = store.map_err(|e| {
         eprintln!("{e}");
         e.to_string()
     });
-    app.manage(AppState { store });
+    let marker = data_root(app)
+        .ok()
+        .map(|root| root.join(PERMISSION_ASKED_MARKER));
+    app.manage(AppState::new(store, own, marker));
 }

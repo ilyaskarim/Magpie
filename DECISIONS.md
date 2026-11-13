@@ -183,3 +183,31 @@ ones where a reasonable person might have chosen differently:
   and then skip the single-instance check. Release builds ignore it.
 - **Why:** test runs must never write to a user's real history, and must
   be able to run next to an installed copy.
+
+### Accessibility explainer answered: a marker file
+
+- **Chosen:** `<root>/accessibility-asked`, created after the system
+  prompt was shown, after the settings pane actually opened, or on "Not
+  now". Once it exists, "Open Accessibility settings" opens the pane
+  directly instead of the one-time system prompt.
+- **Alternatives:** a `settings` table now; an in-memory flag.
+- **Why:** the settings table and `SettingsService` arrive in stage f, and
+  an in-memory flag would show the explainer on every launch. The marker
+  can move into `Settings` when that exists.
+
+### Paste-back without the permission: copy, say so, then return focus
+
+- **Chosen:** when Accessibility is not granted (or no app was saved), Enter
+  copies the item and moves it to the top but keeps the window open. The
+  window shows "Copied — press ⌘V to paste" (Ctrl+V off macOS; "Copied —
+  paste it where you need it" when there is no saved app) for about 1.5 s,
+  then `return_to_previous_app` hides it and reactivates the saved app.
+  Only the trusted path hides at once and goes on to activate and paste;
+  if that later fails (app gone, timeout, keystroke failed), the notice
+  appears the next time the window opens.
+- **Alternatives:** hide at once and show the notice only on the next open;
+  hide at once and reactivate the saved app without telling the user.
+- **Why:** the user has to learn at paste time that they must press paste
+  themselves, and returning focus afterwards means that is one keystroke.
+  The keystroke is sent only when the saved app (same pid and bundle id)
+  is confirmed frontmost, so it never lands in the wrong app.

@@ -2,8 +2,10 @@
 
 pub mod clipboard;
 pub mod frontmost;
+pub mod paster;
 pub mod store;
 
-pub use clipboard::{ClipboardReader, ClipboardWatch};
+pub use clipboard::{ClipboardReader, ClipboardSequence, ClipboardWatch, ClipboardWriter};
 pub use frontmost::Frontmost;
+pub use paster::Paster;
 pub use store::Store;
